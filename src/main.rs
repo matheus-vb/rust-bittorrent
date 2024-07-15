@@ -5,18 +5,31 @@ use std::env;
 // use serde_bencode
 
 #[allow(dead_code)]
-fn decode_bencoded_value(encoded_value: &str) -> serde_json::Value {
+fn decode_bencoded_value(encoded_value: &str) -> (serde_json::Value, &str) {
     // If encoded_value starts with a digit, it's a number
-    if let Some(n) = encoded_value
-        .strip_prefix('i')
-        .and_then(|rest| rest.split_once('e'))
-        .and_then(|(num, _)| num.parse::<i64>().ok())
-    {
-        return n.into();
-    } else if let Some((len, text)) = encoded_value.split_once(':') {
-        if let Ok(len) = len.parse::<usize>() {
-            return serde_json::Value::String(text[..len].to_string());
+    match encoded_value.chars().next() {
+        Some('i') => {
+            if let Some((num, rest)) =
+                encoded_value
+                    .split_at(1)
+                    .1
+                    .split_once('e')
+                    .and_then(|(num, rest)| {
+                        let n = num.parse::<i64>().ok()?;
+                        Some((n, rest))
+                    })
+            {
+                return (num.into(), rest);
+            }
         }
+        Some('0'..='9') => {
+            if let Some((len, text)) = encoded_value.split_once(':') {
+                if let Ok(len) = len.parse::<usize>() {
+                    return (text[..len].to_string().into(), &text[len..]);
+                }
+            }
+        }
+        _ => {}
     }
 
     panic!("Unhandled encoded value: {}", encoded_value)
@@ -34,7 +47,7 @@ fn main() {
         // Uncomment this block to pass the first stage
         let encoded_value = &args[2];
         let decoded_value = decode_bencoded_value(encoded_value);
-        println!("{}", decoded_value.to_string());
+        println!("{}", decoded_value.0.to_string());
     } else {
         eprintln!("unknown command: {}", args[1])
     }
