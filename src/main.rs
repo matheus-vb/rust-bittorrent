@@ -29,6 +29,18 @@ fn decode_bencoded_value(encoded_value: &str) -> (serde_json::Value, &str) {
                 }
             }
         }
+        Some('l') => {
+            let mut elements = Vec::new();
+            let mut rest = encoded_value.split_at(1).1;
+
+            while !rest.is_empty() && !rest.starts_with('e') {
+                let (e, remainder) = decode_bencoded_value(rest);
+                elements.push(e);
+                rest = remainder;
+            }
+
+            return (elements.into(), &rest[1..]);
+        }
         _ => {}
     }
 
