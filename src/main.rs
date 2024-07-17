@@ -69,6 +69,17 @@ impl Torrent {
 
         Ok(())
     }
+
+    fn print_pieces_info(&self) {
+        println!("Piece Lenght: {}", self.info.piece_length);
+        println!("Piece hashes:");
+
+        let piece_vec: Vec<&[u8]> = self.info.pieces.chunks(20).collect();
+
+        for piece in piece_vec {
+            println!("{}", hex::encode(piece));
+        }
+    }
 }
 
 // Usage: your_bittorrent.sh decode "<encoded_value>"
@@ -94,6 +105,8 @@ fn main() {
                 torrent
                     .print_sha1_hex()
                     .expect("encoding after successful decoding should be ok");
+
+                torrent.print_pieces_info();
             }
             Err(e) => {
                 println!("Failed to parse: {e}");
