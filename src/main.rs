@@ -1,36 +1,37 @@
-use core::fmt;
-use reqwest::Url;
-use serde::{
-    de::{self, Visitor},
-    Deserialize, Deserializer, Serialize,
-};
+use serde::{Deserialize, Serialize};
 use serde_bencode;
 use serde_json;
-use std::{collections::BTreeMap, env};
+use std::env;
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Clone, Deserialize, Serialize)]
 struct Info {
-    ///Size of the file to be downloaded in bytes, for single-torrent files
-    length: usize,
+    ///Suggested name (or directory if multifile) to save as.
+    name: Vec<u8>,
 
-    ///Suggested name to save the file/directory as
-    name: String,
+    ///Number of bytes in each piece the file is split into. Files are split into fixed-size lenght
+    ///pieces which are all the same except for the last one, which may be truncated. It is almost
+    ///always a power of two, most commonly 2 18 = 256K.
+    #[serde(rename = "piece length")]
+    piece_length: u64,
 
-    ///Number of bytes in each piece
-    #[serde(rename = "piece lenght")]
-    piece_length: usize,
+    ///String with length multiple of 20. It is subdivided into strings with length of 20, each of
+    ///which is the SHA1 hash of the piece at the corresponding index.
+    pieces: Vec<u8>,
 
-    ///Concatenated SHA-1 hashes of each piece
-    piences: String,
+    ///Length of a single file, in number of bytes
+    length: u64,
+
+    ///A list of UTF-8 encoded strings corresponding to subdirectory names, the last of which is
+    ///the actual file name (a zero length list is an error case)
+    path: Vec<Vec<u8>>,
 }
 
-///Represents a .torrent file, a metainfo file that contains a bencoded dictionary with keys and
-///values
-#[derive(Deserialize, Clone)]
+#[derive(Clone, Deserialize, Serialize)]
 struct Torrent {
-    ///URL to a "tracker", which is a central server that keeps track of peers participating in the
-    ///sharing of a torrent
-    annouce: XUrl,
+    ///The URL of the tracker, which is a central server that keeps track of peers participating in
+    ///the sharing of the torrent.
+    announce: Vec<u8>, //TODO: change to URL
+
     info: Info,
 }
 
@@ -112,36 +113,4 @@ fn decode_bencoded_value(encoded_value: &str) -> (serde_json::Value, &str) {
     }
 
     panic!("Unhandled encoded value: {}", encoded_value)
-}
-
-#[derive(Clone)]
-struct XUrl(Url);
-
-impl<'de> Deserialize<'de> for XUrl {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        // A Visitor that constructs an XUrl from a string URL
-        struct XUrlVisitor;
-
-        impl<'de> Visitor<'de> for XUrlVisitor {
-            type Value = XUrl;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a string representing an URL")
-            }
-
-            fn visit_str<E>(self, value: &str) -> Result<XUrl, E>
-            where
-                E: de::Error,
-            {
-                Url::parse(value)
-                    .map(XUrl)
-                    .map_err(|_| E::custom(format!("invalid URL: {}", value)))
-            }
-        }
-
-        deserializer.deserialize_str(XUrlVisitor)
-    }
 }
