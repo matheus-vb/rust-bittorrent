@@ -1,11 +1,8 @@
-use serde::{de::Visitor, Deserialize, Deserializer, Serialize};
+use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 use serde_bencode;
 use serde_json;
-use std::{
-    env,
-    error::Error,
-    fs::{self},
-};
+use sha1::{Digest, Sha1};
+use std::{env, error::Error, fs};
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
 struct Info {
@@ -20,7 +17,10 @@ struct Info {
 
     ///String with length multiple of 20. It is subdivided into strings with length of 20, each of
     ///which is the SHA1 hash of the piece at the corresponding index.
-    #[serde(deserialize_with = "deserialize_pieces")]
+    #[serde(
+        deserialize_with = "deserialize_pieces",
+        serialize_with = "serialize_pieces"
+    )]
     pieces: Vec<u8>,
 
     ///Length of a single file, in number of bytes
@@ -52,6 +52,19 @@ impl Torrent {
         println!("Tracker URL: {}", self.announce);
         println!("Length: {}", self.info.length);
     }
+
+    fn print_sha1_hex(&self) -> Result<(), Box<dyn Error>> {
+        let encoded_bytes = serde_bencode::to_bytes(&self.info)?;
+        let encoded_bytes_ref: &[u8] = encoded_bytes.as_ref();
+
+        let mut hasher = Sha1::new();
+        hasher.update(encoded_bytes_ref);
+
+        let result = hasher.finalize();
+        println!("Info Hash: {}", hex::encode(result));
+
+        Ok(())
+    }
 }
 
 // Usage: your_bittorrent.sh decode "<encoded_value>"
@@ -73,9 +86,13 @@ fn main() {
         match Torrent::from_file(file_path) {
             Ok(torrent) => {
                 torrent.print_info();
+
+                torrent
+                    .print_sha1_hex()
+                    .expect("encoding after successful decoding should be ok");
             }
             Err(e) => {
-                println!("Failed: {e}");
+                println!("Failed to parse: {e}");
             }
         }
     } else {
@@ -167,4 +184,11 @@ where
     }
 
     deserializer.deserialize_bytes(VecU8Visitor)
+}
+
+fn serialize_pieces<S>(pieces: &Vec<u8>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_bytes(pieces.as_slice())
 }
