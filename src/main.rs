@@ -71,8 +71,8 @@ impl Torrent {
     }
 
     fn print_pieces_info(&self) {
-        println!("Piece Lenght: {}", self.info.piece_length);
-        println!("Piece Hashes: ");
+        println!("Piece Length: {}", self.info.piece_length);
+        println!("Piece Hashes:");
 
         let piece_vec: Vec<&[u8]> = self.info.pieces.chunks(20).collect();
 
