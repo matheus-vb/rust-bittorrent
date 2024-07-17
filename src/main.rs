@@ -41,6 +41,8 @@ struct Torrent {
 }
 
 impl Torrent {
+    ///Generate Torrent from a file path
+    ///The file must have bencoded data
     fn from_file(path: &str) -> Result<Self, Box<dyn Error>> {
         let torrent_bytes = fs::read(path)?;
         let torrent = serde_bencode::de::from_bytes::<Torrent>(&torrent_bytes)?;
@@ -48,11 +50,13 @@ impl Torrent {
         Ok(torrent)
     }
 
+    ///Print Torrent's tracker URL and length
     fn print_info(&self) {
         println!("Tracker URL: {}", self.announce);
         println!("Length: {}", self.info.length);
     }
 
+    ///Print a SHA1 hex of the torrent's info dictionary
     fn print_sha1_hex(&self) -> Result<(), Box<dyn Error>> {
         let encoded_bytes = serde_bencode::to_bytes(&self.info)?;
         let encoded_bytes_ref: &[u8] = encoded_bytes.as_ref();
