@@ -1,36 +1,42 @@
-use serde::{Deserialize, Serialize};
+use serde::{de::Visitor, Deserialize, Deserializer, Serialize};
 use serde_bencode;
 use serde_json;
-use std::env;
+use std::{
+    env,
+    error::Error,
+    fs::{self, File},
+    io::Read,
+};
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize, Debug)]
 struct Info {
     ///Suggested name (or directory if multifile) to save as.
-    name: Vec<u8>,
+    name: String,
 
     ///Number of bytes in each piece the file is split into. Files are split into fixed-size lenght
     ///pieces which are all the same except for the last one, which may be truncated. It is almost
     ///always a power of two, most commonly 2 18 = 256K.
     #[serde(rename = "piece length")]
-    piece_length: u64,
+    piece_length: usize,
 
     ///String with length multiple of 20. It is subdivided into strings with length of 20, each of
     ///which is the SHA1 hash of the piece at the corresponding index.
+    #[serde(deserialize_with = "deserialize_pieces")]
     pieces: Vec<u8>,
 
     ///Length of a single file, in number of bytes
-    length: u64,
+    length: usize,
 
     ///A list of UTF-8 encoded strings corresponding to subdirectory names, the last of which is
     ///the actual file name (a zero length list is an error case)
-    path: Vec<Vec<u8>>,
+    path: Option<Vec<Vec<String>>>,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize, Debug)]
 struct Torrent {
     ///The URL of the tracker, which is a central server that keeps track of peers participating in
     ///the sharing of the torrent.
-    announce: Vec<u8>, //TODO: change to URL
+    announce: String, //TODO: change to URL
 
     info: Info,
 }
@@ -48,6 +54,11 @@ fn main() {
         let encoded_value = &args[2];
         let decoded_value = decode_bencoded_value(encoded_value);
         println!("{}", decoded_value.0.to_string());
+    } else if command == "file" {
+        let torrent_bytes = fs::read("sample.torrent").unwrap();
+        let torrent: Torrent = serde_bencode::de::from_bytes(torrent_bytes.as_ref()).unwrap();
+
+        println!("Announce: {torrent:?}")
     } else {
         eprintln!("unknown command: {}", args[1])
     }
@@ -113,4 +124,28 @@ fn decode_bencoded_value(encoded_value: &str) -> (serde_json::Value, &str) {
     }
 
     panic!("Unhandled encoded value: {}", encoded_value)
+}
+
+fn deserialize_pieces<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct VecU8Visitor;
+
+    impl<'de> Visitor<'de> for VecU8Visitor {
+        type Value = Vec<u8>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a byte string")
+        }
+
+        fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Ok(v.to_vec())
+        }
+    }
+
+    deserializer.deserialize_bytes(VecU8Visitor)
 }
