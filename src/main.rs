@@ -4,8 +4,7 @@ use serde_json;
 use std::{
     env,
     error::Error,
-    fs::{self, File},
-    io::Read,
+    fs::{self},
 };
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
@@ -54,11 +53,21 @@ fn main() {
         let encoded_value = &args[2];
         let decoded_value = decode_bencoded_value(encoded_value);
         println!("{}", decoded_value.0.to_string());
-    } else if command == "file" {
-        let torrent_bytes = fs::read("sample.torrent").unwrap();
-        let torrent: Torrent = serde_bencode::de::from_bytes(torrent_bytes.as_ref()).unwrap();
+    } else if command == "info" {
+        let file_path = &args[2];
 
-        println!("Announce: {torrent:?}")
+        match fs::read(file_path) {
+            Ok(torrent_bytes) => {
+                let torrent: Torrent =
+                    serde_bencode::de::from_bytes(torrent_bytes.as_ref()).unwrap();
+
+                println!("Tracker URL: {}", torrent.announce);
+                println!("Length: {}", torrent.info.length);
+            }
+            Err(e) => {
+                println!("Failed to read file: {e}");
+            }
+        }
     } else {
         eprintln!("unknown command: {}", args[1])
     }
