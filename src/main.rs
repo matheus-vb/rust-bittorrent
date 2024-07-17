@@ -40,6 +40,20 @@ struct Torrent {
     info: Info,
 }
 
+impl Torrent {
+    fn from_file(path: &str) -> Result<Self, Box<dyn Error>> {
+        let torrent_bytes = fs::read(path)?;
+        let torrent = serde_bencode::de::from_bytes::<Torrent>(&torrent_bytes)?;
+
+        Ok(torrent)
+    }
+
+    fn print_info(&self) {
+        println!("Tracker URL: {}", self.announce);
+        println!("Length: {}", self.info.length);
+    }
+}
+
 // Usage: your_bittorrent.sh decode "<encoded_value>"
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -56,16 +70,12 @@ fn main() {
     } else if command == "info" {
         let file_path = &args[2];
 
-        match fs::read(file_path) {
-            Ok(torrent_bytes) => {
-                let torrent: Torrent =
-                    serde_bencode::de::from_bytes(torrent_bytes.as_ref()).unwrap();
-
-                println!("Tracker URL: {}", torrent.announce);
-                println!("Length: {}", torrent.info.length);
+        match Torrent::from_file(file_path) {
+            Ok(torrent) => {
+                torrent.print_info();
             }
             Err(e) => {
-                println!("Failed to read file: {e}");
+                println!("Failed: {e}");
             }
         }
     } else {
