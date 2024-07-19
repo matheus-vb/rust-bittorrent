@@ -2,7 +2,8 @@ use std::env;
 
 use bittorrent_starter_rust::{bencode::decode_bencoded_value, torrent::Torrent};
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args: Vec<String> = env::args().collect();
     let command = &args[1];
 
@@ -17,13 +18,20 @@ fn main() {
 
             match Torrent::from_file(file_path) {
                 Ok(torrent) => {
-                    torrent.print_info();
+                    let info = torrent.get_info();
 
-                    torrent
-                        .print_sha1_hex()
+                    println!("Tracker URL: {}", torrent.announce);
+                    println!("Length: {}", info.length);
+
+                    let sha_hex = torrent
+                        .get_sha1()
                         .expect("encoding after successful decoding should be ok");
 
+                    println!("Info Hash: {}", hex::encode(sha_hex));
+
                     torrent.print_pieces_info();
+
+                    torrent.discover_peers(&sha_hex).await;
                 }
                 Err(e) => {
                     println!("Failed to parse: {e}");

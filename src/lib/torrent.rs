@@ -24,14 +24,13 @@ impl Torrent {
         Ok(torrent)
     }
 
-    ///Print Torrent's tracker URL and length
-    pub fn print_info(&self) {
-        println!("Tracker URL: {}", self.announce);
-        println!("Length: {}", self.info.length);
+    ///Get Torrent's info
+    pub fn get_info(&self) -> Info {
+        self.info.clone()
     }
 
-    ///Print a SHA1 hex of the torrent's info dictionary
-    pub fn print_sha1_hex(&self) -> Result<(), Box<dyn std::error::Error>> {
+    ///Get a SHA1 hex of the torrent's info dictionary
+    pub fn get_sha1(&self) -> Result<[u8; 20], Box<dyn std::error::Error>> {
         let encoded_bytes = serde_bencode::to_bytes(&self.info)?;
         let encoded_bytes_ref: &[u8] = encoded_bytes.as_ref();
 
@@ -39,19 +38,53 @@ impl Torrent {
         hasher.update(encoded_bytes_ref);
 
         let result = hasher.finalize();
-        println!("Info Hash: {}", hex::encode(result));
 
-        Ok(())
+        Ok(result.try_into().expect("Generic Array"))
     }
 
     pub fn print_pieces_info(&self) {
         println!("Piece Length: {}", self.info.piece_length);
         println!("Piece Hashes:");
 
-        let piece_vec: Vec<&[u8]> = self.info.pieces.chunks(20).collect();
-
-        for piece in piece_vec {
+        for piece in &self.info.pieces.0 {
             println!("{}", hex::encode(piece));
         }
     }
+
+    pub async fn discover_peers(&self, info_hash: &[u8; 20]) {
+        let client = reqwest::Client::new();
+
+        let query_params = [
+            ("peer_id", "00112233445566778899".to_string()),
+            ("port", "6881".to_string()),
+            ("uploaded", 0.to_string()),
+            ("downloaded", 0.to_string()),
+            ("left", self.info.length.to_string()),
+            ("compact", 1.to_string()),
+        ];
+
+        println!("{:?}", query_params);
+
+        let url = format!(
+            "{}?{}&info_hash={}",
+            &self.announce,
+            serde_urlencoded::to_string(query_params).unwrap(),
+            urlencode(info_hash)
+        );
+
+        println!("{}", url);
+
+        let response = client.get(url).send().await.unwrap();
+
+        println!("{:?}", response);
+    }
+}
+
+fn urlencode(t: &[u8; 20]) -> String {
+    let mut encoded = String::with_capacity(3 * t.len());
+    for &byte in t {
+        encoded.push('%');
+        encoded.push_str(&hex::encode(&[byte]));
+    }
+    encoded
 }
