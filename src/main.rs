@@ -30,8 +30,31 @@ async fn main() {
                     println!("Info Hash: {}", hex::encode(sha_hex));
 
                     torrent.print_pieces_info();
+                }
+                Err(e) => {
+                    println!("Failed to parse: {e}");
+                }
+            }
+        }
+        "peers" => {
+            let file_path = &args[2];
 
-                    torrent.discover_peers(&sha_hex).await;
+            match Torrent::from_file(file_path) {
+                Ok(torrent) => {
+                    let sha_hex = torrent
+                        .get_sha1()
+                        .expect("encoding after successfil decode is ok");
+
+                    match torrent.discover_peers(&sha_hex).await {
+                        Ok(trackers) => {
+                            for peer in trackers.peers.0 {
+                                println!("{}", peer);
+                            }
+                        }
+                        Err(e) => {
+                            println!("{e}");
+                        }
+                    }
                 }
                 Err(e) => {
                     println!("Failed to parse: {e}");

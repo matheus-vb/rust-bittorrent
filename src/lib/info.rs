@@ -1,3 +1,5 @@
+use std::net::{Ipv4Addr, SocketAddrV4};
+
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
@@ -69,6 +71,68 @@ impl Serialize for Pieces {
         S: Serializer,
     {
         let slice = self.0.concat();
+        serializer.serialize_bytes(&slice)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Peers(pub Vec<SocketAddrV4>);
+struct PeersVisitor;
+
+impl<'de> Visitor<'de> for PeersVisitor {
+    type Value = Peers;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter
+            .write_str("6 bytes, the first 4 being the IP address, and the last 2 the port number")
+    }
+
+    fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        if v.len() % 6 != 0 {
+            return Err(E::custom(format!(
+                "length {} is not multiple of 6",
+                v.len()
+            )));
+        }
+
+        let peers: Vec<SocketAddrV4> = v
+            .chunks_exact(6)
+            .map(|slice| {
+                SocketAddrV4::new(
+                    Ipv4Addr::new(slice[0], slice[1], slice[2], slice[3]),
+                    u16::from_be_bytes([slice[4], slice[5]]),
+                )
+            })
+            .collect();
+
+        Ok(Peers(peers))
+    }
+}
+
+impl<'de> Deserialize<'de> for Peers {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_bytes(PeersVisitor)
+    }
+}
+
+impl Serialize for Peers {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut slice = Vec::with_capacity(6 * self.0.len());
+
+        for peer in &self.0 {
+            slice.extend(peer.ip().octets());
+            slice.extend(peer.port().to_be_bytes());
+        }
+
         serializer.serialize_bytes(&slice)
     }
 }

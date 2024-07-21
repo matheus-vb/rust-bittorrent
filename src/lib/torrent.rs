@@ -1,9 +1,9 @@
-use std::fs;
+use std::{error::Error, fs};
 
 use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
 
-use crate::info::Info;
+use crate::info::{Info, Peers};
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct Torrent {
@@ -12,6 +12,12 @@ pub struct Torrent {
     pub announce: String, //TODO: change to URL
 
     pub info: Info,
+}
+
+#[derive(Deserialize)]
+pub struct TrackerResponse {
+    pub interval: usize,
+    pub peers: Peers,
 }
 
 impl Torrent {
@@ -51,7 +57,10 @@ impl Torrent {
         }
     }
 
-    pub async fn discover_peers(&self, info_hash: &[u8; 20]) {
+    pub async fn discover_peers(
+        &self,
+        info_hash: &[u8; 20],
+    ) -> Result<TrackerResponse, Box<dyn Error>> {
         let client = reqwest::Client::new();
 
         let query_params = [
@@ -63,20 +72,20 @@ impl Torrent {
             ("compact", 1.to_string()),
         ];
 
-        println!("{:?}", query_params);
-
         let url = format!(
             "{}?{}&info_hash={}",
             &self.announce,
-            serde_urlencoded::to_string(query_params).unwrap(),
+            serde_urlencoded::to_string(query_params).unwrap(), //TODO: implement custom Request
+            //struct
             urlencode(info_hash)
         );
 
-        println!("{}", url);
+        let response = client.get(url).send().await?;
+        let response_bytes = response.bytes().await?;
 
-        let response = client.get(url).send().await.unwrap();
+        let tracker_response: TrackerResponse = serde_bencode::de::from_bytes(&response_bytes)?;
 
-        println!("{:?}", response);
+        Ok(tracker_response)
     }
 }
 
@@ -84,7 +93,7 @@ fn urlencode(t: &[u8; 20]) -> String {
     let mut encoded = String::with_capacity(3 * t.len());
     for &byte in t {
         encoded.push('%');
-        encoded.push_str(&hex::encode(&[byte]));
+        encoded.push_str(&hex::encode([byte]));
     }
     encoded
 }
