@@ -47,9 +47,16 @@ async fn main() {
 
                     match torrent.discover_peers(&sha_hex).await {
                         Ok(trackers) => {
-                            for peer in trackers.peers.0 {
-                                println!("{}", peer);
-                            }
+                            trackers.peers.0.iter().for_each(|addr| {
+                                println!("{addr}");
+                            });
+
+                            // if let Ok(mut stream) = TcpStream::connect(trackers.peers.0[0]) {
+                            //     println!("Connected to peer 1");
+                            //     let b: &[u8] = &19_i32.to_le_bytes();
+                            //     let s = stream.write(b);
+                            //     println!("{s:?}");
+                            // }
                         }
                         Err(e) => {
                             println!("{e}");
