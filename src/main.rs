@@ -1,4 +1,9 @@
-use std::env;
+use std::{
+    env,
+    io::Write,
+    net::{SocketAddrV4, TcpStream},
+    str::FromStr,
+};
 
 use bittorrent_starter_rust::{bencode::decode_bencoded_value, torrent::Torrent};
 
@@ -50,13 +55,6 @@ async fn main() {
                             trackers.peers.0.iter().for_each(|addr| {
                                 println!("{addr}");
                             });
-
-                            // if let Ok(mut stream) = TcpStream::connect(trackers.peers.0[0]) {
-                            //     println!("Connected to peer 1");
-                            //     let b: &[u8] = &19_i32.to_le_bytes();
-                            //     let s = stream.write(b);
-                            //     println!("{s:?}");
-                            // }
                         }
                         Err(e) => {
                             println!("{e}");
@@ -66,6 +64,24 @@ async fn main() {
                 Err(e) => {
                     println!("Failed to parse: {e}");
                 }
+            }
+        }
+        "handshake" => {
+            let addr_str = &args[3];
+
+            let addr = match SocketAddrV4::from_str(addr_str) {
+                Ok(addr) => addr,
+                Err(e) => {
+                    println!("Failed to parse addr: {e}");
+                    return;
+                }
+            };
+
+            if let Ok(mut stream) = TcpStream::connect(addr) {
+                println!("Connected to peer");
+                let b: &[u8] = &19_i32.to_le_bytes();
+                let s = stream.write(b);
+                println!("{s:?}");
             }
         }
         _ => {
