@@ -1,11 +1,9 @@
-use std::{
-    env,
-    io::Write,
-    net::{SocketAddrV4, TcpStream},
-    str::FromStr,
-};
+use std::{env, mem, net::SocketAddrV4, str::FromStr};
 
-use bittorrent_starter_rust::{bencode::decode_bencoded_value, torrent::Torrent};
+use bittorrent_starter_rust::{
+    bencode::decode_bencoded_value, handshake::Handshake, torrent::Torrent,
+};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[tokio::main]
 async fn main() {
@@ -67,9 +65,20 @@ async fn main() {
             }
         }
         "handshake" => {
-            let addr_str = &args[3];
+            let file_path = &args[2];
+            let peer_addr = &args[3];
 
-            let addr = match SocketAddrV4::from_str(addr_str) {
+            let torrent = match Torrent::from_file(file_path) {
+                Ok(torrent) => torrent,
+                Err(e) => {
+                    println!("{e}");
+                    return;
+                }
+            };
+
+            let info_hash = torrent.get_sha1().expect("should work");
+
+            let addr = match SocketAddrV4::from_str(peer_addr) {
                 Ok(addr) => addr,
                 Err(e) => {
                     println!("Failed to parse addr: {e}");
@@ -77,11 +86,34 @@ async fn main() {
                 }
             };
 
-            if let Ok(mut stream) = TcpStream::connect(addr) {
-                println!("Connected to peer");
-                let b: &[u8] = &19_i32.to_le_bytes();
-                let s = stream.write(b);
-                println!("{s:?}");
+            let mut peer = match tokio::net::TcpStream::connect(addr).await {
+                Ok(peer) => peer,
+                Err(e) => {
+                    println!("{e}");
+                    return;
+                }
+            };
+
+            let mut handshake = Handshake::new(info_hash, *b"00112233445566778899");
+            {
+                let handshake_bytes =
+                    &mut handshake as *mut Handshake as *mut [u8; mem::size_of::<Handshake>()];
+
+                //Safety: Handshake is a repr(C)
+                let handshake_bytes: &mut [u8; mem::size_of::<Handshake>()] =
+                    unsafe { &mut *handshake_bytes };
+
+                if let Err(e) = peer.write_all(handshake_bytes).await {
+                    println!("{e}");
+                    return;
+                }
+
+                if let Err(e) = peer.read_exact(handshake_bytes).await {
+                    println!("{e}");
+                    return;
+                }
+
+                println!("Peer ID: {}", hex::encode(&handshake.peer_id));
             }
         }
         _ => {
